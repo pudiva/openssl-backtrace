@@ -5,8 +5,9 @@ A patch to OpenSSL's `ERR_put_error()` using [backtrace() from glibc][glibc-back
 
 Developed to debug spikes of mysterious and impossible OpenSSL "shutdown while in init" errors seen in GitHub after an OS upgrade. The errors were reported in ruby exceptions coming from [Trilogy][trilogy], but the stack traces revealed they actually happened in [libcurl][libcurl], meaning they were left on OpenSSL's global error queue to be picked up by the next user.
 
-Guided the following fix to Trilogy:
+Guided the following fixes:
 * https://github.com/trilogy-libraries/trilogy/pull/112
+* https://github.com/curl/curl/pull/11736
 
 How it works
 ------------
