@@ -1,12 +1,60 @@
 OpenSSL backtrace patch
 =======================
 
-A patch using [backtrace() from glibc][glibc-backtrace] to make OpenSSL append a stack trace to its error reports.
+A patch to OpenSSL's `ERR_put_error()` using [backtrace() from glibc][glibc-backtrace] to make it append a stack trace to its error reports.
 
 Developed to debug spikes of mysterious and impossible OpenSSL "shutdown while in init" errors seen in GitHub after an OS upgrade. The errors were reported in ruby exceptions coming from [Trilogy][trilogy], but the stack traces revealed they actually happened in [libcurl][libcurl], meaning they were left on OpenSSL's global error queue to be picked up by the next user.
 
-Guided the following fixes to Trilogy:
+Guided the following fix to Trilogy:
 * https://github.com/trilogy-libraries/trilogy/pull/112
+
+How it works
+------------
+
+The `backtrace()` function walks up the stack collecting stack pointers, and `backtrace_symbols()` resolves them into human-readable strings. Then the strings are concatenated and added to the SSL error with `ERR_add_error_data()`.
+
+```c
+#include <execinfo.h>
+
+/* Add stack trace to the current error */
+void add_backtrace()
+{
+	char buf[4096] = "";
+	int buf_len = 0;
+
+	/* this macro should prevent segfaults - tested with buf[100] */
+#define BUF_PRINTF(...) \
+	do { \
+		if (buf_len < sizeof (buf) - 1) \
+		{ \
+			int n = snprintf(buf + buf_len, sizeof (buf) - buf_len, __VA_ARGS__); \
+			if (n > 0) \
+				buf_len += n; \
+		} \
+	} while (0)
+
+	/* backtrace stuff */
+	void* bt_array[1024];
+	int bt_size;
+	char** bt_strings;
+	int i;
+
+	bt_size = backtrace(bt_array, (sizeof (bt_array) / sizeof (bt_array[0])));
+	bt_strings = backtrace_symbols(bt_array, bt_size);
+	BUF_PRINTF(" Obtained %d stack frames:\n", bt_size);
+
+	if (bt_strings != NULL)
+		for (i = 0; i < bt_size; i++)
+			BUF_PRINTF("%s\n", bt_strings[i]);
+	else
+		BUF_PRINTF("strings == NULL!\n");
+
+	BUF_PRINTF("\n");
+	ERR_add_error_data(1, buf);
+	free(bt_strings);
+#undef BUF_PRINTF
+}
+```
 
 🐋 Docker warning
 -----------------
